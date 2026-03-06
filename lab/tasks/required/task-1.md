@@ -61,6 +61,7 @@ The database starts empty. We can get anonymized data on task completions in Aut
 
 > [!NOTE]
 > Before writing any code, let's explore the autochecker API with `curl` to understand the data format.
+> 
 > The API uses HTTP Basic Auth: `<your-email>` as the username and `<your-password>` as the password.
 > Here, `<your-password>` is `<your-github-username><your-telegram-alias>`.
 
