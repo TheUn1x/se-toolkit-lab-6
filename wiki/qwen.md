@@ -20,6 +20,7 @@
 - [Chat with `Qwen Code`](#chat-with-qwen-code)
   - [Refer to a file](#refer-to-a-file)
   - [Use a skill](#use-a-skill)
+- [Lab instructions for `Qwen Code`](#lab-instructions-for-qwen-code)
 
 ## What is `Qwen Code`
 
@@ -332,10 +333,6 @@ Method 2:
 4. Click `Auto` (`Pick Model`).
 5. Click `Qwen 3 Coder Plus`.
 
-## Lab instructions for `Qwen Code`
-
-`Qwen Code` automatically reads `AGENTS.md` in the project root. This file contains instructions that guide the agent to help you learn — not just generate code. The agent will ask you questions, help you plan, and encourage you to write code yourself.
-
 ## Chat with `Qwen Code`
 
 Actions:
@@ -362,11 +359,6 @@ Example: `@main.py`.
    See [Refer to a file](#refer-to-a-file).
 5. Press `Enter`.
 
-<!-- TODO qwen on VM -->
-<!-- 
+## Lab instructions for `Qwen Code`
 
-#### Install nodejs on the VM
-
-- scp ~/.qwen/oauth_creds.json se-toolkit-vm:~/.qwen/oauth_creds.json
-- nix profile add nixpkgs#nodejs_25
- -->
+[`Qwen Code`](#what-is-qwen-code) automatically reads [`AGENTS.md`](../AGENTS.md) in the project root. This file contains instructions that guide the agent to help you learn — not just generate code. The agent will ask you questions, help you plan, and encourage you to write code yourself.
