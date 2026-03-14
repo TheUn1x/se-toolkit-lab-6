@@ -288,7 +288,29 @@ Building the System Agent taught several important lessons about designing agent
 
 **5. Iterative debugging with run_eval.py.** The benchmark runner was invaluable for rapid iteration. Each failure revealed a specific issue: wrong tool, missing keyword, or incorrect argument. Fixing one issue at a time and re-running led to a working agent.
 
-**6. Maximum iterations protection.** The 10-call limit prevents infinite loops but can truncate legitimate multi-step reasoning. The agent learns to be efficient: list files once, read the relevant file, then answer.
+**6. Maximum iterations protection.** The 10-call limit prevents infinite loops but can truncate legitimate multi-step reasoning. We increased it to 15 to allow for complex bug diagnosis workflows.
+
+**7. Python vs JSON booleans.** A subtle bug: using `true` (JSON) instead of `True` (Python) in the tool schema caused a NameError. Always use Python syntax in Python code, even when defining JSON schemas.
+
+**8. Auth parameter for testing.** To test unauthenticated access (e.g., "what status code without auth?"), we added an optional `auth` parameter to `query_api`. This allows the LLM to explicitly request unauthenticated requests.
+
+**9. Explicit answer instructions.** The LLM would sometimes say "I'll continue reading" instead of providing answers. Adding explicit instructions like "MUST provide a direct, complete answer" and "Do not say 'I'll continue'" significantly improved response quality.
+
+**10. Bug diagnosis workflow.** For bug questions, the agent needs to: (1) query with realistic parameters to trigger the error, (2) read the source code, (3) provide answer with error type, location, and cause. Making this workflow explicit in the system prompt was essential.
+
+## Final Benchmark Score
+
+**10/10 PASSED** on local evaluation.
+
+The agent successfully handles:
+- Wiki documentation lookup (branch protection, SSH)
+- Source code analysis (framework, router modules)
+- Data queries (item count)
+- System facts (status codes without auth)
+- Bug diagnosis (ZeroDivisionError, TypeError with None values)
+- Reasoning questions (request lifecycle, ETL idempotency)
+
+Note: The autochecker bot tests 10 additional hidden questions and uses LLM-based judging for open-ended answers.
 
 ## Example Sessions
 

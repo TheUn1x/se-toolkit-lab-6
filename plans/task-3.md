@@ -189,8 +189,38 @@ In Task 2, `source` was required. In Task 3, `source` is **optional** — system
 
 ### Initial Benchmark Score
 
-*To be filled after first run*
+**First run:** 3/10 passed
+
+Failures:
+- Question 4 (router modules): Agent was reading files but not providing a summary answer
+- Question 6 (status code): Agent was sending auth header by default, needed `auth=false` parameter
+- Questions 7-10: Various issues with incomplete answers and tool selection
 
 ### Iteration Log
 
-*To be filled during debugging*
+**Iteration 1:** Fixed router modules question
+- Problem: Agent said "I'll continue reading" instead of providing answer
+- Fix: Updated system prompt to require direct answers after reading files
+- Result: 5/10 passed
+
+**Iteration 2:** Fixed status code question
+- Problem: Agent always sent auth header, got 200 instead of 401
+- Fix: Added `auth` parameter to query_api tool (default true, can be set to false)
+- Result: 7/10 passed
+
+**Iteration 3:** Fixed bug diagnosis questions
+- Problem: Agent answers were being cut off, missing keywords
+- Fix: 
+  - Increased MAX_TOOL_CALLS from 10 to 15
+  - Updated system prompt with explicit bug diagnosis workflow
+  - Added instruction to query with realistic parameters (e.g., `?lab=lab-01`)
+- Result: 10/10 passed
+
+**Final Score: 10/10 PASSED**
+
+### Key Learnings
+
+1. **Python boolean vs JSON boolean:** Used `true` instead of `True` in tool schema, causing NameError
+2. **Auth parameter needed:** For testing unauthenticated access, agent needs `auth=false` option
+3. **Explicit instructions matter:** LLM needs clear guidance on when to provide final answers
+4. **Bug diagnosis workflow:** Must query with realistic parameters to trigger actual errors
