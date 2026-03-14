@@ -170,3 +170,85 @@ def test_agent_list_wiki_files_uses_list_files() -> None:
             result_content = tc.get("result", "")
             assert "git-workflow.md" in result_content or "git.md" in result_content, \
                 "Expected list_files result to contain wiki files"
+
+
+def test_agent_framework_uses_read_file() -> None:
+    """Test that agent.py uses read_file tool for framework question."""
+    project_root = Path(__file__).parent.parent
+    agent_path = project_root / "agent.py"
+
+    # Run agent.py with framework question
+    result = subprocess.run(
+        [sys.executable, str(agent_path), "What Python web framework does the backend use?"],
+        cwd=project_root,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+    # Parse stdout as JSON
+    stdout = result.stdout.strip()
+    assert stdout, "stdout is empty"
+
+    try:
+        output = json.loads(stdout)
+    except json.JSONDecodeError as e:
+        raise AssertionError(f"stdout is not valid JSON: {e}\nstdout: {stdout}")
+
+    # Validate required fields
+    assert "answer" in output, "Missing 'answer' field"
+    assert "tool_calls" in output, "Missing 'tool_calls' field"
+
+    # Validate that read_file was used
+    tool_calls = output["tool_calls"]
+    assert isinstance(tool_calls, list), "'tool_calls' must be a list"
+    assert len(tool_calls) > 0, "Expected at least one tool call"
+
+    tool_names = [tc.get("tool") for tc in tool_calls]
+    assert "read_file" in tool_names, "Expected read_file to be called"
+
+    # Validate that answer mentions FastAPI
+    answer = output.get("answer", "").lower()
+    assert "fastapi" in answer, f"Expected answer to mention FastAPI, got: {output.get('answer')}"
+
+
+def test_agent_items_count_uses_query_api() -> None:
+    """Test that agent.py uses query_api tool for items count question."""
+    project_root = Path(__file__).parent.parent
+    agent_path = project_root / "agent.py"
+
+    # Run agent.py with items count question
+    result = subprocess.run(
+        [sys.executable, str(agent_path), "How many items are in the database?"],
+        cwd=project_root,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+    # Parse stdout as JSON
+    stdout = result.stdout.strip()
+    assert stdout, "stdout is empty"
+
+    try:
+        output = json.loads(stdout)
+    except json.JSONDecodeError as e:
+        raise AssertionError(f"stdout is not valid JSON: {e}\nstdout: {stdout}")
+
+    # Validate required fields
+    assert "answer" in output, "Missing 'answer' field"
+    assert "tool_calls" in output, "Missing 'tool_calls' field"
+
+    # Validate that query_api was used
+    tool_calls = output["tool_calls"]
+    assert isinstance(tool_calls, list), "'tool_calls' must be a list"
+    assert len(tool_calls) > 0, "Expected at least one tool call"
+
+    tool_names = [tc.get("tool") for tc in tool_calls]
+    assert "query_api" in tool_names, "Expected query_api to be called"
+
+    # Validate that the answer contains a number
+    answer = output.get("answer", "")
+    import re
+    numbers = re.findall(r"\d+", answer)
+    assert len(numbers) > 0, f"Expected answer to contain a number, got: {answer}"
