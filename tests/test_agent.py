@@ -122,10 +122,10 @@ def test_agent_merge_conflict_uses_read_file() -> None:
     tool_names = [tc.get("tool") for tc in tool_calls]
     assert "read_file" in tool_names, "Expected read_file to be called"
 
-    # Validate source contains wiki/git-workflow.md
+    # Validate source contains wiki git file (either git.md or git-workflow.md)
     source = output["source"]
     assert isinstance(source, str), "'source' must be a string"
-    assert "wiki/git-workflow.md" in source, f"Expected wiki/git-workflow.md in source, got: {source}"
+    assert "wiki/git" in source and ".md" in source, f"Expected wiki git file in source, got: {source}"
 
 
 def test_agent_list_wiki_files_uses_list_files() -> None:

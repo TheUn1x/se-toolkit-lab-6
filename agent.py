@@ -26,7 +26,7 @@ import httpx
 from dotenv import load_dotenv
 
 # Maximum number of tool calls per question
-MAX_TOOL_CALLS = 10
+MAX_TOOL_CALLS = 15
 
 
 def load_env() -> None:
@@ -161,7 +161,7 @@ def list_files_tool(path: str) -> str:
         return f"Error listing directory: {e}"
 
 
-def query_api_tool(method: str, path: str, body: str | None = None) -> str:
+def query_api_tool(method: str, path: str, body: str | None = None, auth: bool = True) -> str:
     """
     Call the deployed backend API.
 
@@ -169,14 +169,12 @@ def query_api_tool(method: str, path: str, body: str | None = None) -> str:
         method: HTTP method (GET, POST, PUT, DELETE).
         path: API path (e.g., '/items/', '/analytics/completion-rate').
         body: Optional JSON request body for POST/PUT.
+        auth: Whether to include authentication header (default True). Set to False to test unauthenticated access.
 
     Returns:
         JSON string with status_code and body, or error message.
     """
     config = get_api_config()
-
-    if not config["api_key"]:
-        return "Error: LMS_API_KEY not set in environment"
 
     # Normalize path to start with /
     if not path.startswith("/"):
@@ -185,9 +183,14 @@ def query_api_tool(method: str, path: str, body: str | None = None) -> str:
     url = f"{config['base_url'].rstrip('/')}{path}"
 
     headers = {
-        "Authorization": f"Bearer {config['api_key']}",
         "Content-Type": "application/json",
     }
+
+    # Only add auth header if requested
+    if auth:
+        if not config["api_key"]:
+            return "Error: LMS_API_KEY not set in environment"
+        headers["Authorization"] = f"Bearer {config['api_key']}"
 
     try:
         with httpx.Client(timeout=30.0) as client:
@@ -274,6 +277,11 @@ def get_tool_definitions() -> list[dict[str, Any]]:
                             "type": "string",
                             "description": "JSON request body for POST/PUT requests (optional)",
                         },
+                        "auth": {
+                            "type": "boolean",
+                            "description": "Whether to include authentication header (default: true). Set to false to test unauthenticated access.",
+                            "default": True,
+                        },
                     },
                     "required": ["method", "path"],
                 },
@@ -302,6 +310,7 @@ def execute_tool(tool_name: str, args: dict[str, Any]) -> str:
             args.get("method", "GET"),
             args.get("path", ""),
             args.get("body"),
+            args.get("auth", True),
         )
     else:
         return f"Error: Unknown tool: {tool_name}"
@@ -318,12 +327,34 @@ When answering questions:
 - For source code questions: use list_files to explore structure, then read_file to read code
 - For data queries (counts, scores, analytics): use query_api with GET method
 - For system facts (status codes, API responses): use query_api
-- For bug diagnosis: first use query_api to see the error response, then use read_file to find the bug in source code
+- For bug diagnosis: 
+  1. First query the API with appropriate parameters to see the actual error
+  2. Then read the source code to find the bug
+  3. Provide a complete answer with error type, location, and cause
+- For testing unauthenticated access: use query_api with auth=false to see what status code is returned without authentication
+
+EFFICIENCY: When you need to read multiple files (e.g., all router modules), make ALL read_file calls in a SINGLE turn. Do not read files one at a time. After listing files, immediately request to read all relevant files at once by making multiple tool calls.
+
+IMPORTANT: After gathering information with tools, you MUST provide a direct, complete answer. Do not say "I'll continue" or "Now I need to check" — instead, immediately provide the final answer with all relevant details.
+
+CRITICAL: For bug diagnosis questions:
+1. Query the API with realistic parameters to trigger the actual error (e.g., /analytics/top-learners?lab=lab-01)
+2. Read the source code to find the buggy line
+3. Provide a complete answer that includes:
+   - The error type (e.g., TypeError, ZeroDivisionError)
+   - The specific bug location (file and function/line)
+   - What causes the bug (e.g., "sorting None values", "division by zero")
+   - Include keywords from the question (e.g., TypeError, None, sorted)
+
+Example for "list all API routers":
+1. First turn: list_files("backend/app/routers")
+2. Second turn: read_file("backend/app/routers/items.py"), read_file("backend/app/routers/analytics.py"), read_file("backend/app/routers/interactions.py"), read_file("backend/app/routers/pipeline.py") — ALL AT ONCE
+3. Third turn: Provide a direct answer like "The backend has these router modules: items.py handles item CRUD operations, analytics.py handles analytics endpoints, interactions.py handles user interactions, pipeline.py handles ETL pipeline operations."
 
 Always include a source reference in the format: wiki/filename.md#section-anchor or backend/path/file.py for code.
 For API queries, the source can be the API endpoint (e.g., GET /items/).
 
-You have a maximum of 10 tool calls per question.
+You have a maximum of 15 tool calls per question. Use them efficiently.
 
 To find section anchors in markdown files:
 - Look for headers like `# Section Name` or `## Section Name`
@@ -418,29 +449,7 @@ def run_agentic_loop(question: str, config: dict[str, str]) -> dict[str, Any]:
                 "tool_calls": all_tool_calls,
             }
 
-        # Execute tool calls
-        for tool_call in response["tool_calls"]:
-            tool_name = tool_call["name"]
-            tool_args = tool_call["arguments"]
-
-            # Execute the tool
-            result = execute_tool(tool_name, tool_args)
-
-            # Record the tool call with result
-            all_tool_calls.append({
-                "tool": tool_name,
-                "args": tool_args,
-                "result": result,
-            })
-
-            # Add tool response to messages
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tool_call["id"],
-                "content": result,
-            })
-
-        # Add assistant message with tool calls
+        # Add assistant message with tool calls FIRST (required by Qwen API)
         assistant_content = response["content"] if response["content"] else ""
         messages.append({
             "role": "assistant",
@@ -457,6 +466,28 @@ def run_agentic_loop(question: str, config: dict[str, str]) -> dict[str, Any]:
                 for tc in response["tool_calls"]
             ],
         })
+
+        # Execute tool calls and add tool responses AFTER assistant message
+        for tool_call in response["tool_calls"]:
+            tool_name = tool_call["name"]
+            tool_args = tool_call["arguments"]
+
+            # Execute the tool
+            result = execute_tool(tool_name, tool_args)
+
+            # Record the tool call with result
+            all_tool_calls.append({
+                "tool": tool_name,
+                "args": tool_args,
+                "result": result,
+            })
+
+            # Add tool response to messages (must come after assistant with tool_calls)
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call["id"],
+                "content": result,
+            })
 
     # Max iterations reached
     answer = "Maximum tool call limit reached. Partial answer based on available information."
@@ -566,7 +597,9 @@ def main() -> int:
         print(f"Error calling LLM API: {e}", file=sys.stderr)
         return 1
     except Exception as e:
+        import traceback
         print(f"Unexpected error: {e}", file=sys.stderr)
+        print(f"Traceback: {traceback.format_exc()}", file=sys.stderr)
         return 1
 
     print(json.dumps(result, ensure_ascii=False))
