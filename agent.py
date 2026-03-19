@@ -327,15 +327,20 @@ When answering questions:
 - For source code questions: use list_files to explore structure, then read_file to read code
 - For data queries (counts, scores, analytics): use query_api with GET method
 - For system facts (status codes, API responses): use query_api
-- For bug diagnosis: 
+- For bug diagnosis:
   1. First query the API with appropriate parameters to see the actual error
   2. Then read the source code to find the bug
   3. Provide a complete answer with error type, location, and cause
 - For testing unauthenticated access: use query_api with auth=false to see what status code is returned without authentication
+- For request lifecycle questions (e.g., "journey of HTTP request"): Read docker-compose.yml, Caddyfile, Dockerfile, and main.py — then provide a complete answer tracing all hops from browser → Caddy → FastAPI → auth → router → ORM → PostgreSQL and back.
 
 EFFICIENCY: When you need to read multiple files (e.g., all router modules), make ALL read_file calls in a SINGLE turn. Do not read files one at a time. After listing files, immediately request to read all relevant files at once by making multiple tool calls.
 
-IMPORTANT: After gathering information with tools, you MUST provide a direct, complete answer. Do not say "I'll continue" or "Now I need to check" — instead, immediately provide the final answer with all relevant details.
+CRITICAL RULES:
+1. After gathering information with tools, you MUST provide a direct, complete answer in your NEXT response.
+2. NEVER say "Let me check", "I'll continue", "Now I need to", or similar phrases — these indicate you haven't finished.
+3. If you have read the relevant files, IMMEDIATELY provide the final answer with all details.
+4. Your response after tool calls should be the FINAL ANSWER, not another planning step.
 
 CRITICAL: For bug diagnosis questions:
 1. Query the API with realistic parameters to trigger the actual error (e.g., /analytics/top-learners?lab=lab-01)
@@ -350,6 +355,10 @@ Example for "list all API routers":
 1. First turn: list_files("backend/app/routers")
 2. Second turn: read_file("backend/app/routers/items.py"), read_file("backend/app/routers/analytics.py"), read_file("backend/app/routers/interactions.py"), read_file("backend/app/routers/pipeline.py") — ALL AT ONCE
 3. Third turn: Provide a direct answer like "The backend has these router modules: items.py handles item CRUD operations, analytics.py handles analytics endpoints, interactions.py handles user interactions, pipeline.py handles ETL pipeline operations."
+
+Example for "HTTP request journey":
+1. First turn: read_file("docker-compose.yml"), read_file("caddy/Caddyfile"), read_file("Dockerfile"), read_file("backend/app/main.py") — ALL AT ONCE
+2. Second turn: Provide a complete answer like "The HTTP request journey is: 1) Browser sends request to Caddy reverse proxy on port X, 2) Caddy forwards to FastAPI app, 3) FastAPI authenticates using LMS_API_KEY, 4) Request routed to appropriate handler, 5) ORM queries PostgreSQL, 6) Response flows back through the same path."
 
 Always include a source reference in the format: wiki/filename.md#section-anchor or backend/path/file.py for code.
 For API queries, the source can be the API endpoint (e.g., GET /items/).
@@ -437,10 +446,30 @@ def run_agentic_loop(question: str, config: dict[str, str]) -> dict[str, Any]:
     for iteration in range(MAX_TOOL_CALLS):
         response = call_llm(messages, config, tools)
 
-        # If no tool calls, we have the final answer
+        # If no tool calls, check if we have a final answer
         if not response["tool_calls"]:
-            # Extract source from the answer if possible
             answer = response["content"]
+            
+            # Check if this looks like an intermediate thought (not a final answer)
+            intermediate_phrases = [
+                "let me", "i'll", "i will", "now i need", "let's check",
+                "let's see", "i should", "i need to", "checking", "looking at"
+            ]
+            answer_lower = answer.lower().strip()
+            is_intermediate = any(phrase in answer_lower for phrase in intermediate_phrases)
+            
+            # Also check if answer is too short to be complete (less than 50 chars and no punctuation)
+            is_too_short = len(answer_lower) < 50 and not answer.endswith('.')
+            
+            if is_intermediate or is_too_short:
+                # Add a user message to prompt for final answer
+                messages.append({
+                    "role": "user",
+                    "content": "Please provide your final answer now. Do not say 'let me check' or similar - just give the complete answer based on the information you've gathered."
+                })
+                continue
+            
+            # Extract source from the answer if possible
             source = extract_source_from_answer(answer)
 
             return {
