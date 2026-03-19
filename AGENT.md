@@ -248,6 +248,8 @@ uv run pytest tests/test_agent.py -v
 - `test_agent_list_wiki_files_uses_list_files` — Tests list_files tool for wiki listing
 - `test_agent_framework_uses_read_file` — Tests read_file for source code questions
 - `test_agent_items_count_uses_query_api` — Tests query_api for data queries
+- `test_agent_status_code_uses_query_api` — Tests query_api for status code questions (new Task 3)
+- `test_agent_bug_diagnosis_uses_query_api_and_read_file` — Tests combined tool usage for bug diagnosis (new Task 3)
 
 ## Benchmark Evaluation
 
@@ -297,6 +299,12 @@ Building the System Agent taught several important lessons about designing agent
 **9. Explicit answer instructions.** The LLM would sometimes say "I'll continue reading" instead of providing answers. Adding explicit instructions like "MUST provide a direct, complete answer" and "Do not say 'I'll continue'" significantly improved response quality.
 
 **10. Bug diagnosis workflow.** For bug questions, the agent needs to: (1) query with realistic parameters to trigger the error, (2) read the source code, (3) provide answer with error type, location, and cause. Making this workflow explicit in the system prompt was essential.
+
+**11. Detecting intermediate thoughts.** A critical fix for reasoning questions: the LLM would output intermediate thoughts like "Let me also check the Caddyfile" as the final answer. We added logic in the agentic loop to detect phrases like "let me", "I'll", "now I need to" and automatically prompt the LLM to provide a final answer. This was essential for passing the request lifecycle question.
+
+**12. OAuth token management.** The Qwen proxy uses OAuth tokens that expire. When the agent started returning 401 errors, we discovered the OAuth token had expired and needed to refresh by restarting the proxy container. For production use, automatic token refresh should be implemented.
+
+**13. System prompt examples help.** Adding concrete examples in the system prompt (e.g., "Example for 'HTTP request journey': 1) First turn: read_file(...), 2) Second turn: Provide a complete answer like...") significantly improved the LLM's ability to follow the expected workflow.
 
 ## Final Benchmark Score
 
